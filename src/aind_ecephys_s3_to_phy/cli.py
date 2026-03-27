@@ -160,6 +160,51 @@ class ListSettings(BaseSettings):
                 print(f"{az_name:<80} {az_size / 1e6:>9.1f}M")
 
 
+class ExtractRecordingSettings(BaseSettings):
+    """Write the preprocessed recording to a flat binary file.
+
+    Reconstructs the full preprocessing chain from a SortingAnalyzer
+    (including channel selection) and writes the result as a flat binary.
+    Useful for feeding preprocessed data into pipelines other than phy
+    (e.g. mipmap builders).
+    """
+
+    analyzer_uri: str = Field(description="S3 URI or path to a postprocessed SortingAnalyzer .zarr")
+    raw_uri: str = Field(description="S3 URI or path to the raw recording .zarr")
+    output: Path = Field(description="Output file path (e.g. preprocessed.dat)")
+    dtype: str | None = Field(default=None, description="Output dtype (default: same as recording, typically int16)")
+    n_jobs: int = Field(default=1, description="Parallel jobs for binary writing")
+    chunk_duration: str = Field(default="1s", description="Chunk duration for binary writing")
+
+    def cli_cmd(self) -> None:
+        """Reconstruct the preprocessed recording and write to flat binary."""
+        from spikeinterface.core.recording_tools import write_binary_recording
+
+        print("Reconstructing preprocessed recording...")
+        print(f"  Analyzer: {self.analyzer_uri}")
+        print(f"  Raw:      {self.raw_uri}")
+        recording = reconstruct_recording(self.analyzer_uri, self.raw_uri)
+
+        n_ch = recording.get_num_channels()
+        n_frames = recording.get_num_frames()
+        dtype = self.dtype or str(recording.get_dtype())
+        est_size_gb = n_frames * n_ch * recording.get_dtype().itemsize / 1e9
+        print(f"  Channels: {n_ch}, Frames: {n_frames}, Duration: {recording.get_total_duration():.1f}s")
+        print(f"  Estimated output size: {est_size_gb:.2f} GB")
+
+        self.output.parent.mkdir(parents=True, exist_ok=True)
+        print(f"Writing to {self.output}...")
+        write_binary_recording(
+            recording,
+            file_paths=self.output,
+            dtype=dtype,
+            n_jobs=self.n_jobs,
+            chunk_duration=self.chunk_duration,
+            progress_bar=True,
+        )
+        print(f"Done: {self.output} ({self.output.stat().st_size / 1e9:.2f} GB)")
+
+
 class CompressSettings(BaseSettings):
     """Compress an existing recording.dat to mtscomp .cbin format."""
 
@@ -179,6 +224,7 @@ class S3ToPhy(BaseSettings):
 
     convert: CliSubCommand[ConvertSettings]
     list: CliSubCommand[ListSettings]
+    extract_recording: CliSubCommand[ExtractRecordingSettings]
     compress: CliSubCommand[CompressSettings]
 
     def cli_cmd(self) -> None:

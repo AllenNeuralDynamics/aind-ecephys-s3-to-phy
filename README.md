@@ -10,65 +10,39 @@
 
 Convert AIND ecephys sorted recordings from S3 into [phy](https://github.com/cortex-lab/phy) directories for manual curation, with raw trace access via compressed binary ([mtscomp](https://github.com/int-brain-lab/mtscomp)).
 
+Two S3 assets are needed per session: a **sorted asset** (postprocessed SortingAnalyzer Zarrs) and its corresponding **raw asset** (compressed Zarr recordings). The tool reconstructs the full SpikeInterface preprocessing chain — including bad-channel removal — from the analyzer, streams traces from S3, and compresses them to `.cbin` for phy's trace viewer.
+
 ## Installation
 
 ```bash
 pip install aind-ecephys-s3-to-phy
 ```
 
-## Usage
-
-The package provides the `s3-to-phy` CLI. Two S3 assets are needed: the **sorted asset** (containing postprocessed SortingAnalyzer Zarrs) and the **raw asset** (containing compressed raw recordings).
-
-### List available recordings
+## Quick start
 
 ```bash
-s3-to-phy list --sorted_uri s3://aind-open-data/ecephys_786867_2025-09-25_12-43-56_sorted_2025-12-24_08-46-14
-```
+SORTED=s3://aind-open-data/ecephys_786867_2025-09-25_12-43-56_sorted_2025-12-24_08-46-14
+RAW=s3://aind-open-data/ecephys_786867_2025-09-25_12-43-56
 
-With matched raw recordings:
+# List available recordings (and matched raw files)
+s3-to-phy list --sorted_uri $SORTED --raw_uri $RAW
 
-```bash
-s3-to-phy list \
-  --sorted_uri s3://aind-open-data/ecephys_786867_2025-09-25_12-43-56_sorted_2025-12-24_08-46-14 \
-  --raw_uri s3://aind-open-data/ecephys_786867_2025-09-25_12-43-56
-```
+# Convert all recordings to phy (streams from S3, compresses to .cbin)
+s3-to-phy convert --sorted_uri $SORTED --raw_uri $RAW
 
-### Convert recordings to phy
+# Convert only recordings for a specific probe
+s3-to-phy convert --sorted_uri $SORTED --raw_uri $RAW --probe 46101
 
-Convert all recordings:
+# Convert only a specific experiment
+s3-to-phy convert --sorted_uri $SORTED --raw_uri $RAW --experiment experiment1
 
-```bash
-s3-to-phy convert \
-  --sorted_uri s3://aind-open-data/ecephys_786867_2025-09-25_12-43-56_sorted_2025-12-24_08-46-14 \
-  --raw_uri s3://aind-open-data/ecephys_786867_2025-09-25_12-43-56
-```
+# Extract preprocessed traces as flat binary (for non-phy pipelines, e.g. mipmap)
+s3-to-phy extract_recording \
+  --analyzer_uri $SORTED/postprocessed/experiment1_...46101_recording1.zarr \
+  --raw_uri $RAW/ecephys/ecephys_compressed/experiment1_...46101.zarr \
+  --output preprocessed.dat
 
-Filter by probe or experiment:
-
-```bash
-s3-to-phy convert \
-  --sorted_uri s3://... --raw_uri s3://... \
-  --probe 46101
-
-s3-to-phy convert \
-  --sorted_uri s3://... --raw_uri s3://... \
-  --experiment experiment1
-```
-
-Convert a specific recording:
-
-```bash
-s3-to-phy convert \
-  --sorted_uri s3://... --raw_uri s3://... \
-  --recordings '["experiment1_Record Node 109#Neuropix-PXI-100.46101_recording1.zarr"]'
-```
-
-### Compress an existing phy directory
-
-If you have a phy directory with an uncompressed `recording.dat`:
-
-```bash
+# Compress an existing recording.dat to .cbin
 s3-to-phy compress --phy_dir ./phy_output
 ```
 
@@ -79,55 +53,33 @@ from aind_ecephys_s3_to_phy.analyzer import load_analyzer, attach_recording, dis
 from aind_ecephys_s3_to_phy.recording import reconstruct_recording
 from aind_ecephys_s3_to_phy.export import export_phy
 
-sorted_uri = "s3://aind-open-data/ecephys_786867_..._sorted_..."
-raw_uri = "s3://aind-open-data/ecephys_786867_..."
-
-# Discover available recording pairs
+# Discover and convert
 pairs = discover_pairs(sorted_uri, raw_uri)
-
-# Convert a single recording
 analyzer_name, raw_name = pairs[0]
+
 analyzer_zarr = f"{sorted_uri}/postprocessed/{analyzer_name}"
 raw_zarr = f"{raw_uri}/ecephys/ecephys_compressed/{raw_name}"
 
 analyzer = load_analyzer(analyzer_zarr)
 recording = reconstruct_recording(analyzer_zarr, raw_zarr)
 attach_recording(analyzer, recording)
-
 export_phy(analyzer, recording, "./phy_output", compress=True)
+
+# Or just get the preprocessed recording for other pipelines
+recording = reconstruct_recording(analyzer_zarr, raw_zarr)
+# → SpikeInterface BaseRecording (filtered, bad channels removed, 373 ch)
 ```
 
 ### S3 credentials
 
-Public buckets (like `aind-open-data`) work without credentials. For private buckets, configure AWS credentials via the standard methods (environment variables, `~/.aws/credentials`, IAM roles). SpikeInterface uses `s3fs`/`fsspec` which respects the standard AWS credential chain.
+Public buckets (like `aind-open-data`) work without credentials. For private buckets, configure AWS credentials via the standard methods (`~/.aws/credentials`, environment variables, IAM roles). SpikeInterface uses `s3fs`/`fsspec` which follows the standard AWS credential chain.
 
 ## Development
 
 ```bash
-uv sync
-```
-
-Run the full linting and testing suite:
-
-```bash
-./scripts/run_linters_and_checks.sh -c
-```
-
-Or run individual commands:
-
-```bash
-uv run --frozen ruff format          # Code formatting
-uv run --frozen ruff check           # Linting
-uv run --frozen mypy                 # Type checking
-uv run --frozen interrogate -v       # Documentation coverage
-uv run --frozen codespell --check-filenames  # Spell checking
-uv run --frozen pytest --cov aind_ecephys_s3_to_phy # Tests with coverage
-```
-
-Run integration tests (requires S3 access):
-
-```bash
-uv run --frozen pytest -m integration
+uv sync                                # Set up environment
+./scripts/run_linters_and_checks.sh -c  # Full lint + test suite
+uv run --frozen pytest -m integration   # Integration tests (requires S3)
 ```
 
 ## License

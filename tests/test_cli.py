@@ -31,6 +31,18 @@ def test_convert_help():
     assert "--experiment" in result.stdout
 
 
+def test_extract_recording_help():
+    result = subprocess.run(
+        [sys.executable, "-m", "aind_ecephys_s3_to_phy.cli", "extract_recording", "--help"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert "--analyzer_uri" in result.stdout
+    assert "--raw_uri" in result.stdout
+    assert "--output" in result.stdout
+
+
 def test_compress_help():
     result = subprocess.run(
         [sys.executable, "-m", "aind_ecephys_s3_to_phy.cli", "compress", "--help"],
