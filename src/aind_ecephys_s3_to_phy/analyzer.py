@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import s3fs
@@ -10,6 +11,11 @@ from spikeinterface.core.baserecording import BaseRecording
 from spikeinterface.core.sortinganalyzer import SortingAnalyzer
 
 from aind_ecephys_s3_to_phy.recording import match_analyzer_to_raw
+
+
+def _is_s3(uri: str) -> bool:
+    """Check whether a URI is an S3 path."""
+    return uri.startswith("s3://")
 
 
 def load_analyzer(
@@ -78,30 +84,29 @@ def attach_recording(analyzer: SortingAnalyzer, recording: BaseRecording) -> Non
 
 
 def list_recordings(
-    sorted_asset_uri: str,
+    sorted_asset: str,
     storage_options: dict[str, Any] | None = None,
 ) -> list[tuple[str, int]]:
     """List postprocessed SortingAnalyzer Zarrs in a sorted asset.
 
     Parameters
     ----------
-    sorted_asset_uri : str
-        S3 URI of the sorted asset (e.g. ``s3://bucket/sorted_asset``).
+    sorted_asset : str
+        S3 URI or local path to the sorted asset.
     storage_options : dict or None
-        fsspec storage options (defaults to anonymous access).
+        fsspec storage options (defaults to anonymous access for S3).
 
     Returns
     -------
     list of (name, size_bytes)
         Analyzer Zarr names and their total sizes.
     """
-    fs = _get_filesystem(storage_options)
-    prefix = sorted_asset_uri.replace("s3://", "") + "/postprocessed/"
-    return _list_zarrs(fs, prefix)
+    subdir = sorted_asset.rstrip("/") + "/postprocessed"
+    return _list_zarrs(subdir, storage_options)
 
 
 def list_raw_recordings(
-    raw_asset_uri: str,
+    raw_asset: str,
     storage_options: dict[str, Any] | None = None,
 ) -> list[tuple[str, int]]:
     """List compressed raw recording Zarrs in a raw asset.
@@ -110,8 +115,8 @@ def list_raw_recordings(
 
     Parameters
     ----------
-    raw_asset_uri : str
-        S3 URI of the raw asset.
+    raw_asset : str
+        S3 URI or local path to the raw asset.
     storage_options : dict or None
         fsspec storage options.
 
@@ -120,9 +125,8 @@ def list_raw_recordings(
     list of (name, size_bytes)
         Raw recording Zarr names and their total sizes.
     """
-    fs = _get_filesystem(storage_options)
-    prefix = raw_asset_uri.replace("s3://", "") + "/ecephys/ecephys_compressed/"
-    all_zarrs = _list_zarrs(fs, prefix)
+    subdir = raw_asset.rstrip("/") + "/ecephys/ecephys_compressed"
+    all_zarrs = _list_zarrs(subdir, storage_options)
     return [(name, size) for name, size in all_zarrs if "Neuropix" in name]
 
 
@@ -197,14 +201,18 @@ def filter_recordings(
 # --- Internal helpers ---
 
 
-def _get_filesystem(storage_options: dict[str, Any] | None) -> s3fs.S3FileSystem:
-    """Create an S3FileSystem with the given options."""
+def _list_zarrs(directory: str, storage_options: dict[str, Any] | None = None) -> list[tuple[str, int]]:
+    """List ``.zarr`` directories under a path (S3 or local)."""
+    if _is_s3(directory):
+        return _list_zarrs_s3(directory, storage_options)
+    return _list_zarrs_local(directory)
+
+
+def _list_zarrs_s3(directory: str, storage_options: dict[str, Any] | None) -> list[tuple[str, int]]:
+    """List ``.zarr`` directories on S3."""
     opts = storage_options or {"anon": True}
-    return s3fs.S3FileSystem(**opts)
-
-
-def _list_zarrs(fs: s3fs.S3FileSystem, prefix: str) -> list[tuple[str, int]]:
-    """List ``.zarr`` directories under a prefix with their sizes."""
+    fs = s3fs.S3FileSystem(**opts)
+    prefix = directory.replace("s3://", "")
     entries = fs.ls(prefix, detail=True)
     results: list[tuple[str, int]] = []
     for entry in entries:
@@ -212,4 +220,17 @@ def _list_zarrs(fs: s3fs.S3FileSystem, prefix: str) -> list[tuple[str, int]]:
         if name.endswith(".zarr"):
             size: int = fs.du(entry["name"])
             results.append((name, size))
+    return results
+
+
+def _list_zarrs_local(directory: str) -> list[tuple[str, int]]:
+    """List ``.zarr`` directories on the local filesystem."""
+    parent = Path(directory)
+    if not parent.is_dir():
+        return []
+    results: list[tuple[str, int]] = []
+    for entry in sorted(parent.iterdir()):
+        if entry.name.endswith(".zarr") and entry.is_dir():
+            size = sum(f.stat().st_size for f in entry.rglob("*") if f.is_file())
+            results.append((entry.name, size))
     return results
