@@ -16,6 +16,11 @@ readme = "README.md"
 version = "0.1.0"
 
 dependencies = [
+    "spikeinterface[full,streaming_extractors]",
+    "pydantic-settings",
+    "mtscomp",
+    "wavpack-numcodecs",
+    "s3fs",
 ]
 
 [project.urls]
@@ -23,9 +28,19 @@ Repository = "https://github.com/AllenNeuralDynamics/aind-ecephys-s3-to-phy/"
 Issues = "https://github.com/AllenNeuralDynamics/aind-ecephys-s3-to-phy/issues"
 Changelog = "https://github.com/AllenNeuralDynamics/aind-ecephys-s3-to-phy/blob/main/CHANGELOG.md"
 
+[project.scripts]
+s3-to-phy = "aind_ecephys_s3_to_phy.cli:main"
+
 [dependency-groups]
 types = ["mypy"]
-dev = [{ include-group = "types" }, "codespell", "pytest", "pytest-cov", "ruff", "interrogate"]
+dev = [
+    { include-group = "types" },
+    "codespell",
+    "pytest",
+    "pytest-cov",
+    "ruff",
+    "interrogate",
+]
 jupyter = [{ include-group = "dev" }, "ipykernel", "pip"]
 
 [tool.hatch.build.targets.wheel]
@@ -34,20 +49,22 @@ packages = ["src/aind_ecephys_s3_to_phy"]
 [tool.ruff]
 line-length = 120
 target-version = "py311"
+extend-exclude = ["scripts/"]
 
 [tool.ruff.lint]
 extend-select = ["Q", "RUF100", "C90", "I", "F", "E", "W", "D", "UP", "ANN", "PYI"]
 extend-ignore = ["ANN401"]  # Skip self/cls type annotations
 # Skip all type annotation checks in tests
-per-file-ignores = { "tests/*.py" = ["ANN"] }
+per-file-ignores = { "tests/*.py" = ["ANN", "D"] }
 mccabe = { max-complexity = 14 }
 pydocstyle = { convention = "numpy" }
 
 [tool.codespell]
-skip = ".git,*.pdf,*.svg,./docs/build,uv.lock"
+skip = ".git,*.pdf,*.svg,./docs/build,uv.lock,mwe_workdir"
 
 [tool.pytest.ini_options]
-addopts = "--strict-markers --tb=short --cov=src --cov-report=term-missing --cov-fail-under=0"
+addopts = "--strict-markers --tb=short --cov=src --cov-report=term-missing --cov-fail-under=0 -m 'not integration'"
+markers = ["integration: tests requiring S3 access (deselect with '-m \"not integration\"')"]
 testpaths = ["tests"]
 
 [tool.interrogate]
@@ -61,6 +78,7 @@ exclude = [
   "docs",
   "build",
   "examples",
+  "scripts",
   "site",
 ]
 
@@ -79,4 +97,8 @@ show_error_codes = true
 module = "tests.*"
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
+
+[[tool.mypy.overrides]]
+module = ["spikeinterface.*", "mtscomp", "wavpack_numcodecs", "s3fs"]
+ignore_missing_imports = true
 

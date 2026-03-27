@@ -1,4 +1,4 @@
-"""Tools to get phy-ready data from AIND ecephys data on S3"""
+"""Tools to get phy-ready data from AIND ecephys data on S3."""
 
 from importlib.metadata import PackageNotFoundError, version
 

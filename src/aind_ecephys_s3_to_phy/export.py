@@ -1,0 +1,148 @@
+"""Export a SortingAnalyzer to a phy directory with compressed traces."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import mtscomp
+import numpy as np
+from spikeinterface.core.baserecording import BaseRecording
+from spikeinterface.core.recording_tools import write_binary_recording
+from spikeinterface.core.sortinganalyzer import SortingAnalyzer
+from spikeinterface.exporters import export_to_phy
+
+
+def export_phy(
+    analyzer: SortingAnalyzer,
+    recording: BaseRecording,
+    output_dir: str | Path,
+    *,
+    compress: bool = True,
+    n_jobs: int = 1,
+    chunk_duration: str = "1s",
+) -> Path:
+    """Export a SortingAnalyzer to a phy directory.
+
+    Writes spike data via SpikeInterface's ``export_to_phy``, then streams
+    the preprocessed recording to a flat binary and optionally compresses it
+    with mtscomp.
+
+    Parameters
+    ----------
+    analyzer : SortingAnalyzer
+        Analyzer with recording attached (see :func:`~.analyzer.attach_recording`).
+    recording : BaseRecording
+        The preprocessed recording to write as binary traces.
+    output_dir : str or Path
+        Directory to write phy files into.
+    compress : bool
+        If True (default), compress ``recording.dat`` to ``.cbin`` format.
+    n_jobs : int
+        Number of parallel jobs for binary writing.
+    chunk_duration : str
+        Chunk duration for binary writing (e.g. ``"1s"``).
+
+    Returns
+    -------
+    Path
+        The output directory.
+    """
+    output_dir = Path(output_dir)
+
+    # 1. Export spike data (templates, spike times, clusters, metrics, etc.)
+    export_to_phy(
+        analyzer,
+        output_dir,
+        copy_binary=False,
+        compute_pc_features=False,
+        compute_amplitudes=False,
+        use_relative_path=True,
+    )
+
+    # 2. Write the preprocessed recording as flat binary
+    dat_path = output_dir / "recording.dat"
+    write_binary_recording(
+        recording,
+        file_paths=dat_path,
+        dtype=recording.get_dtype(),
+        n_jobs=n_jobs,
+        chunk_duration=chunk_duration,
+        progress_bar=True,
+    )
+
+    # Update params.py to point at recording.dat
+    _update_params_dat_path(output_dir, "recording.dat")
+
+    # 3. Optionally compress to .cbin
+    if compress:
+        compress_binary(output_dir)
+
+    return output_dir
+
+
+def compress_binary(phy_dir: str | Path) -> None:
+    """Compress ``recording.dat`` to mtscomp ``.cbin`` format.
+
+    Reads recording metadata from ``params.py``, compresses the ``.dat``
+    file, updates ``params.py`` to point at the ``.cbin``, and deletes
+    the original ``.dat``.
+
+    Parameters
+    ----------
+    phy_dir : str or Path
+        Path to a phy output directory containing ``recording.dat`` and
+        ``params.py``.
+
+    Raises
+    ------
+    FileNotFoundError
+        If ``recording.dat`` or ``params.py`` is missing.
+    """
+    phy_dir = Path(phy_dir)
+    dat_path = phy_dir / "recording.dat"
+    cbin_path = phy_dir / "recording.cbin"
+    ch_path = phy_dir / "recording.ch"
+
+    if not dat_path.exists():
+        raise FileNotFoundError(f"No recording.dat found in {phy_dir}")
+
+    params = _read_params(phy_dir)
+
+    mtscomp.compress(
+        str(dat_path),
+        out=str(cbin_path),
+        outmeta=str(ch_path),
+        sample_rate=params["sample_rate"],
+        n_channels=params["n_channels_dat"],
+        dtype=params["dtype"],
+    )
+
+    _update_params_dat_path(phy_dir, "recording.cbin")
+    dat_path.unlink()
+
+
+# --- Internal helpers ---
+
+
+def _read_params(phy_dir: Path) -> dict[str, Any]:
+    """Parse ``params.py`` in a phy directory."""
+    params_path = phy_dir / "params.py"
+    if not params_path.exists():
+        raise FileNotFoundError(f"No params.py found in {phy_dir}")
+    namespace: dict[str, Any] = {"r": str, "np": np}
+    exec(params_path.read_text(), namespace)
+    return namespace
+
+
+def _update_params_dat_path(phy_dir: Path, dat_filename: str) -> None:
+    """Rewrite the ``dat_path`` line in ``params.py``."""
+    params_path = phy_dir / "params.py"
+    lines = params_path.read_text().splitlines(keepends=True)
+    new_lines: list[str] = []
+    for line in lines:
+        if line.startswith("dat_path"):
+            new_lines.append(f"dat_path = r'{dat_filename}'\n")
+        else:
+            new_lines.append(line)
+    params_path.write_text("".join(new_lines))

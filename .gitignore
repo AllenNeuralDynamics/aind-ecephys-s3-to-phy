@@ -143,3 +143,6 @@ dmypy.json
 
 # Claude
 .claude/
+
+# MWE working directory
+mwe_workdir/
