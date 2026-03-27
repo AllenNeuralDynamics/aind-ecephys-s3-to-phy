@@ -209,6 +209,7 @@ class ExtractRecordingSettings(BaseSettings):
                 n_jobs=self.n_jobs,
                 chunk_duration=self.chunk_duration,
                 progress_bar=True,
+                pool_engine="thread",
             )
             cbin_path = self.output.with_suffix(".cbin")
             ch_path = self.output.with_suffix(".ch")
@@ -232,6 +233,7 @@ class ExtractRecordingSettings(BaseSettings):
                 n_jobs=self.n_jobs,
                 chunk_duration=self.chunk_duration,
                 progress_bar=True,
+                pool_engine="thread",
             )
             print(f"Done: {self.output} ({self.output.stat().st_size / 1e9:.2f} GB)")
 

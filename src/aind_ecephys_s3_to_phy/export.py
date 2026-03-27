@@ -69,6 +69,7 @@ def export_phy(
         n_jobs=n_jobs,
         chunk_duration=chunk_duration,
         progress_bar=True,
+        pool_engine="thread",
     )
 
     # Update params.py to point at recording.dat
