@@ -161,23 +161,26 @@ class ListSettings(BaseSettings):
 
 
 class ExtractRecordingSettings(BaseSettings):
-    """Write the preprocessed recording to a flat binary file.
+    """Write the preprocessed recording to a binary file.
 
     Reconstructs the full preprocessing chain from a SortingAnalyzer
     (including channel selection) and writes the result as a flat binary.
+    With ``--compress``, produces a ``.cbin`` (mtscomp) file instead.
     Useful for feeding preprocessed data into pipelines other than phy
     (e.g. mipmap builders).
     """
 
     analyzer_uri: str = Field(description="S3 URI or path to a postprocessed SortingAnalyzer .zarr")
     raw_uri: str = Field(description="S3 URI or path to the raw recording .zarr")
-    output: Path = Field(description="Output file path (e.g. preprocessed.dat)")
+    output: Path = Field(description="Output file path (e.g. preprocessed.dat or preprocessed.cbin)")
+    compress: bool = Field(default=False, description="Compress output to .cbin (mtscomp)")
     dtype: str | None = Field(default=None, description="Output dtype (default: same as recording, typically int16)")
     n_jobs: int = Field(default=1, description="Parallel jobs for binary writing")
     chunk_duration: str = Field(default="1s", description="Chunk duration for binary writing")
 
     def cli_cmd(self) -> None:
-        """Reconstruct the preprocessed recording and write to flat binary."""
+        """Reconstruct the preprocessed recording and write to binary."""
+        import mtscomp
         from spikeinterface.core.recording_tools import write_binary_recording
 
         print("Reconstructing preprocessed recording...")
@@ -188,21 +191,49 @@ class ExtractRecordingSettings(BaseSettings):
         n_ch = recording.get_num_channels()
         n_frames = recording.get_num_frames()
         dtype = self.dtype or str(recording.get_dtype())
+        sample_rate = recording.sampling_frequency
         est_size_gb = n_frames * n_ch * recording.get_dtype().itemsize / 1e9
         print(f"  Channels: {n_ch}, Frames: {n_frames}, Duration: {recording.get_total_duration():.1f}s")
-        print(f"  Estimated output size: {est_size_gb:.2f} GB")
+        print(f"  Estimated raw size: {est_size_gb:.2f} GB")
 
         self.output.parent.mkdir(parents=True, exist_ok=True)
-        print(f"Writing to {self.output}...")
-        write_binary_recording(
-            recording,
-            file_paths=self.output,
-            dtype=dtype,
-            n_jobs=self.n_jobs,
-            chunk_duration=self.chunk_duration,
-            progress_bar=True,
-        )
-        print(f"Done: {self.output} ({self.output.stat().st_size / 1e9:.2f} GB)")
+
+        if self.compress:
+            # Write intermediate .dat, compress to .cbin, delete .dat
+            dat_path = self.output.with_suffix(".dat")
+            print(f"Writing intermediate {dat_path}...")
+            write_binary_recording(
+                recording,
+                file_paths=dat_path,
+                dtype=dtype,
+                n_jobs=self.n_jobs,
+                chunk_duration=self.chunk_duration,
+                progress_bar=True,
+            )
+            cbin_path = self.output.with_suffix(".cbin")
+            ch_path = self.output.with_suffix(".ch")
+            print(f"Compressing to {cbin_path}...")
+            mtscomp.compress(
+                str(dat_path),
+                out=str(cbin_path),
+                outmeta=str(ch_path),
+                sample_rate=sample_rate,
+                n_channels=n_ch,
+                dtype=dtype,
+            )
+            dat_path.unlink()
+            print(f"Done: {cbin_path} ({cbin_path.stat().st_size / 1e9:.2f} GB)")
+        else:
+            print(f"Writing to {self.output}...")
+            write_binary_recording(
+                recording,
+                file_paths=self.output,
+                dtype=dtype,
+                n_jobs=self.n_jobs,
+                chunk_duration=self.chunk_duration,
+                progress_bar=True,
+            )
+            print(f"Done: {self.output} ({self.output.stat().st_size / 1e9:.2f} GB)")
 
 
 class CompressSettings(BaseSettings):
