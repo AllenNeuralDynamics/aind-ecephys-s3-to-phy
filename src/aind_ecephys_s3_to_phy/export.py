@@ -52,8 +52,10 @@ def export_phy(
         The output directory.
     """
     output_dir = Path(output_dir)
+    dat_path = output_dir / "recording.dat"
+    cbin_path = output_dir / "recording.cbin"
 
-    # 1. Export spike data (templates, spike times, clusters, metrics, etc.)
+    # 1. Export spike data (always — fast, ensures latest extensions)
     export_to_phy(
         analyzer,
         output_dir,
@@ -61,26 +63,33 @@ def export_phy(
         compute_pc_features=True,
         compute_amplitudes=True,
         use_relative_path=True,
+        remove_if_exists=True,
     )
 
-    # 2. Write the preprocessed recording as flat binary
-    dat_path = output_dir / "recording.dat"
-    write_binary_recording(
-        recording,
-        file_paths=dat_path,
-        dtype=recording.get_dtype(),
-        n_jobs=n_jobs,
-        chunk_duration=chunk_duration,
-        progress_bar=True,
-        pool_engine="thread",
-    )
+    # 2. Write the preprocessed recording as flat binary (skip if already done)
+    if cbin_path.exists():
+        print(f"  Skipping binary write — {cbin_path} already exists")
+    elif dat_path.exists():
+        print(f"  Skipping binary write — {dat_path} already exists")
+    else:
+        write_binary_recording(
+            recording,
+            file_paths=dat_path,
+            dtype=recording.get_dtype(),
+            n_jobs=n_jobs,
+            chunk_duration=chunk_duration,
+            progress_bar=True,
+            pool_engine="thread",
+        )
 
-    # Update params.py to point at recording.dat
-    _update_params_dat_path(output_dir, "recording.dat")
-
-    # 3. Optionally compress to .cbin
-    if compress:
+    # 3. Update params.py and optionally compress to .cbin
+    if cbin_path.exists():
+        _update_params_dat_path(output_dir, "recording.cbin")
+    elif compress and dat_path.exists():
+        _update_params_dat_path(output_dir, "recording.dat")
         compress_binary(output_dir, check=check_compression)
+    elif dat_path.exists():
+        _update_params_dat_path(output_dir, "recording.dat")
 
     return output_dir
 
