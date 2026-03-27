@@ -45,6 +45,7 @@ class ConvertSettings(BaseSettings):
         default=None, description="Filter recordings by experiment prefix (e.g. experiment1)"
     )
     compress: bool = Field(default=True, description="Compress recording.dat to .cbin")
+    check_compression: bool = Field(default=True, description="Verify compression (slower but safe)")
     n_jobs: int = Field(default=1, description="Parallel jobs for binary writing")
     chunk_duration: str = Field(default="1s", description="Chunk duration for binary writing")
 
@@ -124,6 +125,7 @@ class ConvertSettings(BaseSettings):
             recording,
             phy_dir,
             compress=self.compress,
+            check_compression=self.check_compression,
             n_jobs=self.n_jobs,
             chunk_duration=self.chunk_duration,
         )
@@ -242,11 +244,12 @@ class CompressSettings(BaseSettings):
     """Compress an existing recording.dat to mtscomp .cbin format."""
 
     phy_dir: Path = Field(description="Path to a phy output directory containing recording.dat")
+    check: bool = Field(default=True, description="Verify compression (slower but safe)")
 
     def cli_cmd(self) -> None:
         """Compress recording.dat in the given phy directory."""
         print(f"Compressing {self.phy_dir / 'recording.dat'}...")
-        compress_binary(self.phy_dir)
+        compress_binary(self.phy_dir, check=self.check)
         print(f"Done: {self.phy_dir / 'recording.cbin'}")
 
 

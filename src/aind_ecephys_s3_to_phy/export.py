@@ -19,6 +19,7 @@ def export_phy(
     output_dir: str | Path,
     *,
     compress: bool = True,
+    check_compression: bool = True,
     n_jobs: int = 1,
     chunk_duration: str = "1s",
 ) -> Path:
@@ -38,6 +39,8 @@ def export_phy(
         Directory to write phy files into.
     compress : bool
         If True (default), compress ``recording.dat`` to ``.cbin`` format.
+    check_compression : bool
+        If True (default), verify compression by decompressing and comparing.
     n_jobs : int
         Number of parallel jobs for binary writing.
     chunk_duration : str
@@ -77,12 +80,12 @@ def export_phy(
 
     # 3. Optionally compress to .cbin
     if compress:
-        compress_binary(output_dir)
+        compress_binary(output_dir, check=check_compression)
 
     return output_dir
 
 
-def compress_binary(phy_dir: str | Path) -> None:
+def compress_binary(phy_dir: str | Path, *, check: bool = True) -> None:
     """Compress ``recording.dat`` to mtscomp ``.cbin`` format.
 
     Reads recording metadata from ``params.py``, compresses the ``.dat``
@@ -94,6 +97,10 @@ def compress_binary(phy_dir: str | Path) -> None:
     phy_dir : str or Path
         Path to a phy output directory containing ``recording.dat`` and
         ``params.py``.
+    check : bool
+        If True (default), verify the compressed file by decompressing and
+        comparing against the original. Doubles I/O time but guarantees
+        lossless compression.
 
     Raises
     ------
@@ -117,6 +124,7 @@ def compress_binary(phy_dir: str | Path) -> None:
         sample_rate=params["sample_rate"],
         n_channels=params["n_channels_dat"],
         dtype=params["dtype"],
+        check_after_compress=check,
     )
 
     _update_params_dat_path(phy_dir, "recording.cbin")
