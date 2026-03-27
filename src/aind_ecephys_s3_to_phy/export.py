@@ -58,8 +58,8 @@ def export_phy(
         analyzer,
         output_dir,
         copy_binary=False,
-        compute_pc_features=False,
-        compute_amplitudes=False,
+        compute_pc_features=True,
+        compute_amplitudes=True,
         use_relative_path=True,
     )
 
