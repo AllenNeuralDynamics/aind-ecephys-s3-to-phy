@@ -25,21 +25,21 @@ def test_convert_help():
         text=True,
     )
     assert result.returncode == 0
-    assert "--sorted_uri" in result.stdout
-    assert "--raw_uri" in result.stdout
+    assert "--sorted-uri" in result.stdout
+    assert "--raw-uri" in result.stdout
     assert "--probe" in result.stdout
     assert "--experiment" in result.stdout
 
 
 def test_extract_recording_help():
     result = subprocess.run(
-        [sys.executable, "-m", "aind_ecephys_s3_to_phy.cli", "extract_recording", "--help"],
+        [sys.executable, "-m", "aind_ecephys_s3_to_phy.cli", "extract-recording", "--help"],
         capture_output=True,
         text=True,
     )
     assert result.returncode == 0
-    assert "--analyzer_uri" in result.stdout
-    assert "--raw_uri" in result.stdout
+    assert "--analyzer-uri" in result.stdout
+    assert "--raw-uri" in result.stdout
     assert "--output" in result.stdout
 
 
@@ -50,7 +50,7 @@ def test_compress_help():
         text=True,
     )
     assert result.returncode == 0
-    assert "--phy_dir" in result.stdout
+    assert "--phy-dir" in result.stdout
 
 
 class TestCleanupPartial:
@@ -79,7 +79,7 @@ class TestCleanupPartial:
 @pytest.mark.integration
 def test_list_subcommand(sorted_asset_uri):
     result = subprocess.run(
-        [sys.executable, "-m", "aind_ecephys_s3_to_phy.cli", "list", "--sorted_uri", sorted_asset_uri],
+        [sys.executable, "-m", "aind_ecephys_s3_to_phy.cli", "list", "--sorted-uri", sorted_asset_uri],
         capture_output=True,
         text=True,
         timeout=60,

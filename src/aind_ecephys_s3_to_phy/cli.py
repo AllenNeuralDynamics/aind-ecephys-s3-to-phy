@@ -251,11 +251,11 @@ class CompressSettings(BaseSettings):
 class S3ToPhy(BaseSettings):
     """Convert AIND ecephys sorted recordings from S3 into phy directories."""
 
-    model_config = dict(cli_prog_name="s3-to-phy")
+    model_config = dict(cli_prog_name="s3-to-phy", cli_kebab_case=True, populate_by_name=True)
 
     convert: CliSubCommand[ConvertSettings]
     list: CliSubCommand[ListSettings]
-    extract_recording: CliSubCommand[ExtractRecordingSettings]
+    extract_recording: CliSubCommand[ExtractRecordingSettings] = Field(alias="extract-recording")
     compress: CliSubCommand[CompressSettings]
 
     def cli_cmd(self) -> None:

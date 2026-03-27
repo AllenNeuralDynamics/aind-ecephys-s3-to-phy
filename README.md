@@ -25,25 +25,25 @@ SORTED=s3://aind-open-data/ecephys_786867_2025-09-25_12-43-56_sorted_2025-12-24_
 RAW=s3://aind-open-data/ecephys_786867_2025-09-25_12-43-56
 
 # List available recordings (and matched raw files)
-s3-to-phy list --sorted_uri $SORTED --raw_uri $RAW
+s3-to-phy list --sorted-uri $SORTED --raw-uri $RAW
 
 # Convert all recordings to phy (streams from S3, compresses to .cbin)
-s3-to-phy convert --sorted_uri $SORTED --raw_uri $RAW
+s3-to-phy convert --sorted-uri $SORTED --raw-uri $RAW
 
 # Convert only recordings for a specific probe
-s3-to-phy convert --sorted_uri $SORTED --raw_uri $RAW --probe 46101
+s3-to-phy convert --sorted-uri $SORTED --raw-uri $RAW --probe 46101
 
 # Convert only a specific experiment
-s3-to-phy convert --sorted_uri $SORTED --raw_uri $RAW --experiment experiment1
+s3-to-phy convert --sorted-uri $SORTED --raw-uri $RAW --experiment experiment1
 
 # Extract preprocessed traces as flat binary (for non-phy pipelines, e.g. mipmap)
-s3-to-phy extract_recording \
-  --analyzer_uri $SORTED/postprocessed/experiment1_...46101_recording1.zarr \
-  --raw_uri $RAW/ecephys/ecephys_compressed/experiment1_...46101.zarr \
+s3-to-phy extract-recording \
+  --analyzer-uri $SORTED/postprocessed/experiment1_...46101_recording1.zarr \
+  --raw-uri $RAW/ecephys/ecephys_compressed/experiment1_...46101.zarr \
   --output preprocessed.dat
 
 # Compress an existing recording.dat to .cbin
-s3-to-phy compress --phy_dir ./phy_output
+s3-to-phy compress --phy-dir ./phy_output
 ```
 
 ### Python API
