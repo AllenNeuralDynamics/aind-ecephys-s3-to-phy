@@ -59,27 +59,36 @@ def export_phy(
     # 1. Export spike data (always — fast, ensures latest extensions).
     #    export_to_phy requires an empty directory and remove_if_exists
     #    does shutil.rmtree, so stash binary files in the parent directory.
+    #    Use try/finally to guarantee restoration — these files are expensive.
     _binary_files = [cbin_path, ch_path, dat_path]
     _preserved: list[tuple[Path, Path]] = []
     for f in _binary_files:
         if f.exists():
-            tmp = output_dir.parent / f"._{f.name}.stash"
-            f.rename(tmp)
-            _preserved.append((tmp, f))
+            stash = output_dir.parent / f"._{f.name}.stash"
+            if stash.exists():
+                raise RuntimeError(
+                    f"Stash file {stash} already exists from a previous interrupted run. "
+                    f"Restore it manually to {f} before re-running."
+                )
+            f.rename(stash)
+            _preserved.append((stash, f))
 
-    export_to_phy(
-        analyzer,
-        output_dir,
-        copy_binary=False,
-        compute_pc_features=True,
-        compute_amplitudes=True,
-        use_relative_path=True,
-        remove_if_exists=True,
-    )
-
-    # Restore binary files
-    for tmp, orig in _preserved:
-        tmp.rename(orig)
+    try:
+        export_to_phy(
+            analyzer,
+            output_dir,
+            copy_binary=False,
+            compute_pc_features=True,
+            compute_amplitudes=True,
+            use_relative_path=True,
+            remove_if_exists=True,
+        )
+    finally:
+        # Restore binary files even if export_to_phy fails
+        for stash, orig in _preserved:
+            if stash.exists():
+                orig.parent.mkdir(parents=True, exist_ok=True)
+                stash.rename(orig)
 
     # 2. Write the preprocessed recording as flat binary (skip if already done)
     if cbin_path.exists():
