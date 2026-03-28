@@ -57,13 +57,13 @@ def export_phy(
     ch_path = output_dir / "recording.ch"
 
     # 1. Export spike data (always — fast, ensures latest extensions).
-    #    export_to_phy requires an empty directory, so move binary files
-    #    out temporarily if they exist from a previous run.
+    #    export_to_phy requires an empty directory and remove_if_exists
+    #    does shutil.rmtree, so stash binary files in the parent directory.
     _binary_files = [cbin_path, ch_path, dat_path]
     _preserved: list[tuple[Path, Path]] = []
     for f in _binary_files:
         if f.exists():
-            tmp = f.with_suffix(f.suffix + ".tmp")
+            tmp = output_dir.parent / f"._{f.name}.stash"
             f.rename(tmp)
             _preserved.append((tmp, f))
 
