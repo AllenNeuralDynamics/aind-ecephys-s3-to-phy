@@ -45,7 +45,7 @@ class ConvertSettings(BaseSettings):
         default=None, description="Filter recordings by experiment prefix (e.g. experiment1)"
     )
     compress: bool = Field(default=True, description="Compress recording.dat to .cbin")
-    check_compression: bool = Field(default=True, description="Verify compression (slower but safe)")
+    skip_check: bool = Field(default=False, description="Skip mtscomp compression verification")
     n_jobs: int = Field(default=1, description="Parallel jobs for binary writing")
     chunk_duration: str = Field(default="1s", description="Chunk duration for binary writing")
 
@@ -125,7 +125,7 @@ class ConvertSettings(BaseSettings):
             recording,
             phy_dir,
             compress=self.compress,
-            check_compression=self.check_compression,
+            check_compression=not self.skip_check,
             n_jobs=self.n_jobs,
             chunk_duration=self.chunk_duration,
         )
@@ -256,7 +256,7 @@ class CompressSettings(BaseSettings):
 class S3ToPhy(BaseSettings):
     """Convert AIND ecephys sorted recordings from S3 into phy directories."""
 
-    model_config = dict(cli_prog_name="s3-to-phy", cli_kebab_case=True, populate_by_name=True)
+    model_config = dict(cli_prog_name="s3-to-phy", cli_kebab_case=True, cli_implicit_flags=True, populate_by_name=True)
 
     convert: CliSubCommand[ConvertSettings]
     list: CliSubCommand[ListSettings]

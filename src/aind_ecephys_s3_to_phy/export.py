@@ -56,9 +56,40 @@ def export_phy(
     cbin_path = output_dir / "recording.cbin"
     ch_path = output_dir / "recording.ch"
 
-    # 1. Export spike data (always — fast, ensures latest extensions).
-    #    export_to_phy requires an empty directory and remove_if_exists
-    #    does shutil.rmtree, so stash binary files in the parent directory.
+    # 1. Write the binary first (most expensive step, skip if already done).
+    #    This gives us local data for PC extraction in step 2.
+    if cbin_path.exists():
+        print(f"  Skipping binary write — {cbin_path} already exists")
+    elif dat_path.exists():
+        print(f"  Skipping binary write — {dat_path} already exists")
+    else:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        write_binary_recording(
+            recording,
+            file_paths=dat_path,
+            dtype=recording.get_dtype(),
+            n_jobs=n_jobs,
+            chunk_duration=chunk_duration,
+            progress_bar=True,
+            pool_engine="thread",
+        )
+
+    # 2. Export spike data (templates, amplitudes, PCs, metrics, etc.).
+    #    If the .dat exists, swap the analyzer's recording to a local
+    #    BinaryRecordingExtractor so PC extraction reads from disk, not S3.
+    if dat_path.exists():
+        from spikeinterface.core import BinaryRecordingExtractor
+
+        local_rec = BinaryRecordingExtractor(
+            file_paths=dat_path,
+            sampling_frequency=recording.sampling_frequency,
+            num_channels=recording.get_num_channels(),
+            dtype=recording.get_dtype(),
+        )
+        local_rec.set_channel_locations(recording.get_channel_locations())
+        analyzer._recording = local_rec
+
+    #    Stash binary files so export_to_phy can have a clean directory.
     #    Use try/finally to guarantee restoration — these files are expensive.
     _binary_files = [cbin_path, ch_path, dat_path]
     _preserved: list[tuple[Path, Path]] = []
@@ -82,6 +113,8 @@ def export_phy(
             compute_amplitudes=True,
             use_relative_path=True,
             remove_if_exists=True,
+            n_jobs=n_jobs,
+            pool_engine="thread",
         )
     finally:
         # Restore binary files even if export_to_phy fails
@@ -89,22 +122,6 @@ def export_phy(
             if stash.exists():
                 orig.parent.mkdir(parents=True, exist_ok=True)
                 stash.rename(orig)
-
-    # 2. Write the preprocessed recording as flat binary (skip if already done)
-    if cbin_path.exists():
-        print(f"  Skipping binary write — {cbin_path} already exists")
-    elif dat_path.exists():
-        print(f"  Skipping binary write — {dat_path} already exists")
-    else:
-        write_binary_recording(
-            recording,
-            file_paths=dat_path,
-            dtype=recording.get_dtype(),
-            n_jobs=n_jobs,
-            chunk_duration=chunk_duration,
-            progress_bar=True,
-            pool_engine="thread",
-        )
 
     # 3. Update params.py and optionally compress to .cbin
     if cbin_path.exists():
