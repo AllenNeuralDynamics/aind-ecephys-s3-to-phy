@@ -54,8 +54,19 @@ def export_phy(
     output_dir = Path(output_dir)
     dat_path = output_dir / "recording.dat"
     cbin_path = output_dir / "recording.cbin"
+    ch_path = output_dir / "recording.ch"
 
-    # 1. Export spike data (always — fast, ensures latest extensions)
+    # 1. Export spike data (always — fast, ensures latest extensions).
+    #    export_to_phy requires an empty directory, so move binary files
+    #    out temporarily if they exist from a previous run.
+    _binary_files = [cbin_path, ch_path, dat_path]
+    _preserved: list[tuple[Path, Path]] = []
+    for f in _binary_files:
+        if f.exists():
+            tmp = f.with_suffix(f.suffix + ".tmp")
+            f.rename(tmp)
+            _preserved.append((tmp, f))
+
     export_to_phy(
         analyzer,
         output_dir,
@@ -65,6 +76,10 @@ def export_phy(
         use_relative_path=True,
         remove_if_exists=True,
     )
+
+    # Restore binary files
+    for tmp, orig in _preserved:
+        tmp.rename(orig)
 
     # 2. Write the preprocessed recording as flat binary (skip if already done)
     if cbin_path.exists():
