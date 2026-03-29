@@ -17,7 +17,7 @@ version = "0.1.0"
 
 dependencies = [
     "spikeinterface[full,streaming_extractors]",
-    "pydantic-settings",
+    "tyro",
     "mtscomp",
     "wavpack-numcodecs",
     "s3fs",
@@ -99,6 +99,6 @@ disallow_untyped_defs = false
 disallow_incomplete_defs = false
 
 [[tool.mypy.overrides]]
-module = ["spikeinterface.*", "mtscomp", "wavpack_numcodecs", "s3fs"]
+module = ["spikeinterface.*", "mtscomp", "wavpack_numcodecs", "s3fs", "tyro"]
 ignore_missing_imports = true
 

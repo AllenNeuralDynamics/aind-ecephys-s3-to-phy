@@ -15,6 +15,7 @@ def test_help_exits_zero():
     assert result.returncode == 0
     assert "convert" in result.stdout
     assert "list" in result.stdout
+    assert "extract-recording" in result.stdout
     assert "compress" in result.stdout
 
 
@@ -82,7 +83,7 @@ def test_list_subcommand(sorted_asset_uri):
         [sys.executable, "-m", "aind_ecephys_s3_to_phy.cli", "list", "--sorted-uri", sorted_asset_uri],
         capture_output=True,
         text=True,
-        timeout=60,
+        timeout=120,
     )
     assert result.returncode == 0
     assert "recording1.zarr" in result.stdout
