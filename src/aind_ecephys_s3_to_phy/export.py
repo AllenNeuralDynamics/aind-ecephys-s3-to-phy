@@ -7,6 +7,7 @@ from typing import Any
 
 import mtscomp
 import numpy as np
+import pandas as pd
 from spikeinterface.core.baserecording import BaseRecording
 from spikeinterface.core.recording_tools import write_binary_recording
 from spikeinterface.core.sortinganalyzer import SortingAnalyzer
@@ -123,6 +124,9 @@ def export_phy(
                 orig.parent.mkdir(parents=True, exist_ok=True)
                 stash.rename(orig)
 
+    # Rewrite cluster_group.tsv using sorting labels
+    _write_cluster_labels(analyzer, output_dir)
+
     # 3. Update params.py and optionally compress to .cbin
     if cbin_path.exists():
         _update_params_dat_path(output_dir, "recording.cbin")
@@ -192,6 +196,57 @@ def _read_params(phy_dir: Path) -> dict[str, Any]:
     namespace: dict[str, Any] = {"r": str, "np": np}
     exec(params_path.read_text(), namespace)
     return namespace
+
+
+def _write_cluster_labels(analyzer: SortingAnalyzer, output_dir: Path) -> None:
+    """Rewrite ``cluster_group.tsv`` using sorting labels and write individual label columns.
+
+    Assigns phy cluster groups based on a combined heuristic:
+
+    - **good**: KSLabel ``good`` AND decoder_label ``sua``
+    - **mua**: everything else that isn't noise
+    - **noise**: decoder_label ``noise`` OR default_qc ``False``
+
+    Also writes each available label (KSLabel, decoder_label, default_qc,
+    decoder_probability) as a separate ``cluster_*.tsv`` for visibility
+    in phy's cluster view.
+    """
+    sorting = analyzer.sorting
+    unit_ids = sorting.unit_ids
+    n_units = len(unit_ids)
+    cluster_ids = list(range(n_units))
+
+    # Determine combined cluster group
+    ks_label = sorting.get_property("KSLabel")
+    decoder_label = sorting.get_property("decoder_label")
+    default_qc = sorting.get_property("default_qc")
+
+    groups: list[str] = ["unsorted"] * n_units
+    for i in range(n_units):
+        is_noise = False
+        if decoder_label is not None and decoder_label[i] == "noise":
+            is_noise = True
+        if default_qc is not None and not default_qc[i]:
+            is_noise = True
+
+        if is_noise:
+            groups[i] = "noise"
+        elif ks_label is not None and ks_label[i] == "good" and decoder_label is not None and decoder_label[i] == "sua":
+            groups[i] = "good"
+        else:
+            groups[i] = "mua"
+
+    # Overwrite cluster_group.tsv
+    cluster_group = pd.DataFrame({"cluster_id": cluster_ids, "group": groups})
+    cluster_group.to_csv(output_dir / "cluster_group.tsv", sep="\t", index=False)
+
+    # Write individual label columns as cluster_*.tsv
+    _label_properties = ["KSLabel", "decoder_label", "default_qc", "decoder_probability"]
+    for prop_name in _label_properties:
+        values = sorting.get_property(prop_name)
+        if values is not None:
+            df = pd.DataFrame({"cluster_id": cluster_ids, prop_name: values})
+            df.to_csv(output_dir / f"cluster_{prop_name}.tsv", sep="\t", index=False)
 
 
 def _update_params_dat_path(phy_dir: Path, dat_filename: str) -> None:

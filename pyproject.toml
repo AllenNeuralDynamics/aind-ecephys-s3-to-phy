@@ -99,6 +99,6 @@ disallow_untyped_defs = false
 disallow_incomplete_defs = false
 
 [[tool.mypy.overrides]]
-module = ["spikeinterface.*", "mtscomp", "wavpack_numcodecs", "s3fs", "tyro"]
+module = ["spikeinterface.*", "mtscomp", "wavpack_numcodecs", "s3fs", "tyro", "pandas"]
 ignore_missing_imports = true
 
