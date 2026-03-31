@@ -96,7 +96,7 @@ def export_phy(
     _preserved: list[tuple[Path, Path]] = []
     for f in _binary_files:
         if f.exists():
-            stash = output_dir.parent / f"._{f.name}.stash"
+            stash = output_dir.parent / f"._{output_dir.name}_{f.name}.stash"
             if stash.exists():
                 raise RuntimeError(
                     f"Stash file {stash} already exists from a previous interrupted run. "
