@@ -15,7 +15,10 @@ import shutil
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
+
+if TYPE_CHECKING:
+    from spikeinterface.core.baserecording import BaseRecording
 
 import tyro
 
@@ -28,6 +31,7 @@ from aind_ecephys_s3_to_phy.analyzer import (
     load_analyzer,
 )
 from aind_ecephys_s3_to_phy.export import compress_binary, export_phy
+from aind_ecephys_s3_to_phy.motion import apply_motion_correction, find_motion_path, load_motion
 from aind_ecephys_s3_to_phy.recording import match_analyzer_to_raw, reconstruct_recording
 
 
@@ -64,6 +68,9 @@ class Convert:
 
     chunk_duration: str = "1s"
     """Chunk duration for binary writing."""
+
+    motion_correct: bool = True
+    """Apply KS4 motion correction if a motion estimate exists (default: True)."""
 
 
 @dataclass
@@ -106,6 +113,12 @@ class ExtractRecording:
 
     chunk_duration: str = "1s"
     """Chunk duration for binary writing."""
+
+    motion_correct: bool = True
+    """Apply KS4 motion correction if a motion estimate exists (default: True)."""
+
+    sorted_uri: str | None = None
+    """S3 URI or local path to the sorted asset (needed for motion correction)."""
 
 
 @dataclass
@@ -162,7 +175,7 @@ def _run_convert(cmd: Convert) -> None:
         print(f"  Output: {phy_dir}")
 
         try:
-            _convert_one(cmd, analyzer_uri, raw_uri, phy_dir)
+            _convert_one(cmd, analyzer_uri, raw_uri, phy_dir, rec_name)
             n_ok += 1
             print(f"  Done: {phy_dir}")
         except KeyboardInterrupt:
@@ -203,13 +216,15 @@ def _resolve_recordings(cmd: Convert) -> list[str]:
     return recordings
 
 
-def _convert_one(cmd: Convert, analyzer_uri: str, raw_uri: str, phy_dir: Path) -> None:
+def _convert_one(cmd: Convert, analyzer_uri: str, raw_uri: str, phy_dir: Path, rec_name: str) -> None:
     """Convert a single recording to phy."""
     print("  Loading analyzer...")
     analyzer = load_analyzer(analyzer_uri)
 
     print("  Reconstructing preprocessed recording...")
     recording = reconstruct_recording(analyzer_uri, raw_uri)
+
+    recording = _maybe_motion_correct(recording, cmd.sorted_uri, rec_name, cmd.motion_correct)
 
     print("  Attaching recording to analyzer...")
     attach_recording(analyzer, recording)
@@ -224,6 +239,30 @@ def _convert_one(cmd: Convert, analyzer_uri: str, raw_uri: str, phy_dir: Path) -
         n_jobs=cmd.n_jobs,
         chunk_duration=cmd.chunk_duration,
     )
+
+
+def _maybe_motion_correct(
+    recording: BaseRecording,
+    sorted_uri: str | None,
+    recording_name: str,
+    motion_correct: bool,
+) -> BaseRecording:
+    """Apply motion correction if requested and a motion estimate exists."""
+    if not motion_correct:
+        print("  Motion correction: disabled")
+        return recording
+    if sorted_uri is None:
+        print("  Motion correction: skipped (no sorted URI provided)")
+        return recording
+
+    motion_path = find_motion_path(sorted_uri, recording_name)
+    if motion_path is None:
+        print("  Motion correction: no motion estimate found — writing uncorrected traces")
+        return recording
+
+    print(f"  Applying motion correction from {motion_path} ...")
+    motion = load_motion(motion_path)
+    return apply_motion_correction(recording, motion)
 
 
 def _run_list(cmd: List) -> None:
@@ -260,6 +299,10 @@ def _run_extract_recording(cmd: ExtractRecording) -> None:
     print(f"  Analyzer: {cmd.analyzer_uri}")
     print(f"  Raw:      {cmd.raw_uri}")
     recording = reconstruct_recording(cmd.analyzer_uri, cmd.raw_uri)
+
+    # Derive recording name from analyzer URI for motion lookup
+    rec_name = cmd.analyzer_uri.rstrip("/").split("/")[-1]
+    recording = _maybe_motion_correct(recording, cmd.sorted_uri, rec_name, cmd.motion_correct)
 
     n_ch = recording.get_num_channels()
     n_frames = recording.get_num_frames()

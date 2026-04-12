@@ -77,6 +77,26 @@ class TestCleanupPartial:
         _cleanup_partial(tmp_path / "does_not_exist")  # should not raise
 
 
+def test_convert_help_includes_motion_correct():
+    result = subprocess.run(
+        [sys.executable, "-m", "aind_ecephys_s3_to_phy.cli", "convert", "--help"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert "--motion-correct" in result.stdout or "--no-motion-correct" in result.stdout
+
+
+def test_extract_recording_help_includes_motion_correct():
+    result = subprocess.run(
+        [sys.executable, "-m", "aind_ecephys_s3_to_phy.cli", "extract-recording", "--help"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert "--motion-correct" in result.stdout or "--no-motion-correct" in result.stdout
+
+
 @pytest.mark.integration
 def test_list_subcommand(sorted_asset_uri):
     result = subprocess.run(
