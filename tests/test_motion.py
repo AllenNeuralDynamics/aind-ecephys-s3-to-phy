@@ -24,7 +24,7 @@ def _write_motion(motion_dir, *, n_time_bins=10, n_spatial_bins=3, duration_s=60
         temporal_bins_s=temporal_bins,
         spatial_bins_um=spatial_bins,
     )
-    motion.save(motion_dir, overwrite=True)
+    motion.save(motion_dir)
     return motion
 
 
