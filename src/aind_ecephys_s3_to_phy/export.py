@@ -1,14 +1,17 @@
-"""Export a SortingAnalyzer to a phy directory with compressed traces."""
+"""Export a SortingAnalyzer to a phy directory, with traces written to disk or read lazily."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
 import mtscomp
 import numpy as np
 import pandas as pd
+import spikeinterface as si
 from spikeinterface.core.baserecording import BaseRecording
+from spikeinterface.core.core_tools import SIJsonEncoder
 from spikeinterface.core.recording_tools import write_binary_recording
 from spikeinterface.core.sortinganalyzer import SortingAnalyzer
 from spikeinterface.exporters import export_to_phy
@@ -139,6 +142,74 @@ def export_phy(
     return output_dir
 
 
+def export_phy_lazy(
+    analyzer: SortingAnalyzer,
+    recording_dict: dict[str, Any],
+    output_dir: str | Path,
+) -> Path:
+    """Export a SortingAnalyzer to a phy directory that reads its traces lazily.
+
+    No traces are written. ``recording.json`` holds *recording_dict*, which phylib opens with
+    SpikeInterface when ``dat_path`` names a ``.json`` file (phylib with ``SpikeInterfaceEphysReader``).
+    Waveforms come from the analyzer's stored subset (``_phy_spikes_subset.*``), so phy reads traces
+    only in the trace view, and needs no PC features.
+
+    Parameters
+    ----------
+    analyzer : SortingAnalyzer
+        Analyzer with the ``random_spikes`` and ``waveforms`` extensions; no recording needed.
+    recording_dict : dict
+        Provenance dict of the analyzer's preprocessed recording, from
+        :func:`~.recording.lazy_recording_dict`.
+    output_dir : str or Path
+        Directory to write phy files into.
+
+    Returns
+    -------
+    Path
+        The output directory.
+
+    Raises
+    ------
+    ValueError
+        If the analyzer has empty units, lacks the waveform extensions, or the recording does not
+        match the analyzer's channels and samples.
+    """
+    output_dir = Path(output_dir)
+    counts = analyzer.sorting.count_num_spikes_per_unit(outputs="array")
+    # export_to_phy drops empty units, which would renumber clusters away from the spike vector's unit_index
+    if counts.min() == 0:
+        raise ValueError(f"{int((counts == 0).sum())} empty units; phy cluster ids would not match the analyzer")
+    for ext in ("random_spikes", "waveforms"):
+        if analyzer.get_extension(ext) is None:
+            analyzer.load_extension(ext)
+        if analyzer.get_extension(ext) is None:
+            raise ValueError(f"Analyzer has no '{ext}' extension (required for lazy traces).")
+
+    export_to_phy(
+        analyzer,
+        output_dir,
+        copy_binary=False,
+        compute_pc_features=False,
+        use_relative_path=True,
+        remove_if_exists=True,
+        verbose=False,
+    )
+
+    (output_dir / "recording.json").write_text(json.dumps(recording_dict, cls=SIJsonEncoder, indent=1))
+    recording = si.load(output_dir / "recording.json")
+    if list(recording.channel_ids) != list(analyzer.channel_ids) or (
+        recording.get_num_samples() != analyzer.get_num_samples()
+    ):
+        raise ValueError("recording.json does not match the analyzer's channels or sample count")
+
+    _update_params_dat_path(output_dir, "recording.json")
+    _update_params_line(output_dir, "dtype", f"'{np.dtype(recording.get_dtype()).name}'")
+    _write_waveform_subset(analyzer, output_dir)
+    _write_cluster_labels(analyzer, output_dir)
+    return output_dir
+
+
 def compress_binary(phy_dir: str | Path, *, check: bool = True) -> None:
     """Compress ``recording.dat`` to mtscomp ``.cbin`` format.
 
@@ -247,6 +318,35 @@ def _write_cluster_labels(analyzer: SortingAnalyzer, output_dir: Path) -> None:
         if values is not None:
             df = pd.DataFrame({"cluster_id": cluster_ids, prop_name: values})
             df.to_csv(output_dir / f"cluster_{prop_name}.tsv", sep="\t", index=False)
+
+
+def _write_waveform_subset(analyzer: SortingAnalyzer, output_dir: Path) -> None:
+    """Write phylib's ``_phy_spikes_subset.*`` files from the analyzer's stored waveforms.
+
+    ``random_spikes`` indexes the spike vector, whose order is also that of ``spike_times.npy``.
+    """
+    spike_ids = analyzer.get_extension("random_spikes").get_data()
+    waveforms = analyzer.get_extension("waveforms").get_data()
+    unit_index = analyzer.sorting.to_spike_vector()["unit_index"][spike_ids]
+    mask = (
+        analyzer.sparsity.mask
+        if analyzer.sparsity is not None
+        else np.ones((len(analyzer.unit_ids), analyzer.get_num_channels()), dtype=bool)
+    )
+    unit_channels = -np.ones((len(analyzer.unit_ids), waveforms.shape[2]), dtype=np.int64)
+    for u in range(len(analyzer.unit_ids)):
+        channels = np.flatnonzero(mask[u])
+        unit_channels[u, : len(channels)] = channels
+    np.save(output_dir / "_phy_spikes_subset.spikes.npy", spike_ids.astype(np.int64))
+    np.save(output_dir / "_phy_spikes_subset.channels.npy", unit_channels[unit_index])
+    np.save(output_dir / "_phy_spikes_subset.waveforms.npy", waveforms)
+
+
+def _update_params_line(phy_dir: Path, key: str, value: str) -> None:
+    """Rewrite the ``key = ...`` line in ``params.py``."""
+    params_path = phy_dir / "params.py"
+    lines = params_path.read_text().splitlines(keepends=True)
+    params_path.write_text("".join(f"{key} = {value}\n" if line.startswith(f"{key} ") else line for line in lines))
 
 
 def _update_params_dat_path(phy_dir: Path, dat_filename: str) -> None:

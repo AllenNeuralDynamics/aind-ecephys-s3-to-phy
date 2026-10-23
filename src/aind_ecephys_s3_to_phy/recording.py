@@ -105,6 +105,39 @@ def reconstruct_recording(
     return _load_extractor_from_dict(fixed)
 
 
+def lazy_recording_dict(
+    analyzer_path: str,
+    raw_path: str,
+    storage_options: dict[str, Any] | None = None,
+    raw_storage_options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build a recording provenance dict that reads the raw data from *raw_path* when loaded.
+
+    Parameters
+    ----------
+    analyzer_path : str
+        Path or S3 URI to the SortingAnalyzer ``.zarr`` directory.
+    raw_path : str
+        S3 URI or local path to the raw recording Zarr.
+    storage_options : dict or None
+        fsspec storage options for accessing the analyzer Zarr.
+    raw_storage_options : dict or None
+        fsspec storage options stored with the raw leaf. Defaults to ``{"anon": True}`` for an S3
+        *raw_path*, since a stale AWS profile otherwise fails before unsigned access is tried.
+
+    Returns
+    -------
+    dict
+        A JSON-serializable dict that ``spikeinterface.load`` turns into the preprocessed recording.
+    """
+    rec_dict = fix_recording_dict(get_recording_dict(analyzer_path, storage_options), raw_path)
+    if raw_storage_options is None and raw_path.startswith("s3://"):
+        raw_storage_options = {"anon": True}
+    if raw_storage_options is not None:
+        _leaf(rec_dict)["kwargs"]["storage_options"] = raw_storage_options
+    return rec_dict
+
+
 # --- Name matching ---
 
 
@@ -142,6 +175,15 @@ def _fix_leaf_path(d: dict[str, Any], new_path: str) -> None:
     # Leaf node — replace the path
     d["kwargs"]["folder_path"] = new_path
     d["relative_paths"] = False
+
+
+def _leaf(d: dict[str, Any]) -> dict[str, Any]:
+    """Return the innermost extractor dict of a recording chain."""
+    for key in ("recording", "parent_recording"):
+        child = d.get("kwargs", {}).get(key)
+        if isinstance(child, dict) and "class" in child:
+            return _leaf(child)
+    return d
 
 
 def _clear_relative_paths(d: dict[str, Any]) -> None:

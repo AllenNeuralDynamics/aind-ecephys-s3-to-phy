@@ -36,6 +36,9 @@ s3-to-phy convert --sorted-uri $SORTED --raw-uri $RAW --probe 46101
 # Convert only a specific experiment
 s3-to-phy convert --sorted-uri $SORTED --raw-uri $RAW --experiment experiment1
 
+# Write no traces: phy reads them from the raw asset on S3 when you view them
+s3-to-phy convert --sorted-uri $SORTED --raw-uri $RAW --probe 46101 --lazy
+
 # Extract preprocessed traces as flat binary (for non-phy pipelines, e.g. mipmap)
 s3-to-phy extract-recording \
   --analyzer-uri $SORTED/postprocessed/experiment1_...46101_recording1.zarr \
@@ -45,6 +48,20 @@ s3-to-phy extract-recording \
 # Compress an existing recording.dat to .cbin
 s3-to-phy compress --phy-dir ./phy_output
 ```
+
+### Lazy traces
+
+`--lazy` exports in about a minute per probe instead of hours, with no trace file:
+
+- `recording.json` holds the analyzer's preprocessing chain over the raw Zarr on S3, and `params.py`'s
+  `dat_path` names it. phylib opens it through SpikeInterface: this needs a phylib with
+  `SpikeInterfaceEphysReader` (cortex-lab/phylib#68).
+- Waveforms come from the analyzer's stored subset, written as `_phy_spikes_subset.*` (most of the folder's
+  size, a few GB per probe). Phy reads traces only in the trace view, or for a waveform outside the subset
+  (about 0.5 s per spike from S3). No PC features are computed.
+- Traces are read on demand: a jump to a new window costs about a second, and scrolling is cached.
+- Traces are not motion-corrected, matching the analyzer's waveforms. SpikeInterface's motion
+  interpolation does not survive a round trip through JSON.
 
 ### Python API
 

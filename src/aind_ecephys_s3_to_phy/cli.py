@@ -4,6 +4,7 @@ Usage::
 
     s3-to-phy convert --sorted-uri s3://... --raw-uri s3://...
     s3-to-phy convert --sorted-uri s3://... --raw-uri s3://... --probe 46101
+    s3-to-phy convert --sorted-uri s3://... --raw-uri s3://... --lazy
     s3-to-phy list --sorted-uri s3://...
     s3-to-phy extract-recording --analyzer-uri s3://... --raw-uri s3://... --output out.dat
     s3-to-phy compress --phy-dir ./phy_output
@@ -30,9 +31,9 @@ from aind_ecephys_s3_to_phy.analyzer import (
     list_recordings,
     load_analyzer,
 )
-from aind_ecephys_s3_to_phy.export import compress_binary, export_phy
+from aind_ecephys_s3_to_phy.export import compress_binary, export_phy, export_phy_lazy
 from aind_ecephys_s3_to_phy.motion import apply_motion_correction, find_motion_path, load_motion
-from aind_ecephys_s3_to_phy.recording import match_analyzer_to_raw, reconstruct_recording
+from aind_ecephys_s3_to_phy.recording import lazy_recording_dict, match_analyzer_to_raw, reconstruct_recording
 
 
 @dataclass
@@ -71,6 +72,10 @@ class Convert:
 
     motion_correct: bool = True
     """Apply KS4 motion correction if a motion estimate exists (default: True)."""
+
+    lazy: bool = False
+    """Write no traces: phy reads them from the raw asset when viewed, through recording.json.
+    Needs phylib with SpikeInterfaceEphysReader. Traces are not motion-corrected."""
 
 
 @dataclass
@@ -220,6 +225,11 @@ def _convert_one(cmd: Convert, analyzer_uri: str, raw_uri: str, phy_dir: Path, r
     """Convert a single recording to phy."""
     print("  Loading analyzer...")
     analyzer = load_analyzer(analyzer_uri)
+
+    if cmd.lazy:
+        print("  Exporting to phy with lazy traces (no motion correction)...")
+        export_phy_lazy(analyzer, lazy_recording_dict(analyzer_uri, raw_uri), phy_dir)
+        return
 
     print("  Reconstructing preprocessed recording...")
     recording = reconstruct_recording(analyzer_uri, raw_uri)

@@ -129,3 +129,49 @@ def test_single_recording_spike_export(analyzer_uri, raw_uri, tmp_path):
     assert (output_dir / "templates.npy").exists()
     assert (output_dir / "params.py").exists()
     assert (output_dir / "channel_positions.npy").exists()
+
+
+class TestExportPhyLazy:
+    @pytest.fixture()
+    def analyzer(self):
+        import spikeinterface as si
+
+        # a lazy noise recording survives the JSON round trip; injected-template recordings do not
+        recording = si.generate_recording(durations=[5.0], num_channels=8, seed=0)
+        sorting = si.generate_sorting(num_units=4, durations=[5.0], seed=0)
+        analyzer = si.create_sorting_analyzer(sorting, recording, sparse=True, format="memory")
+        analyzer.compute(["random_spikes", "waveforms", "templates"])
+        return analyzer, recording
+
+    def test_writes_recording_json_and_waveform_subset(self, analyzer, tmp_path):
+        from aind_ecephys_s3_to_phy.export import export_phy_lazy
+
+        analyzer, recording = analyzer
+        out = export_phy_lazy(analyzer, recording.to_dict(), tmp_path / "phy")
+
+        params = _read_params(out)
+        assert params["dat_path"] == "recording.json"
+        assert np.dtype(params["dtype"]) == recording.get_dtype()
+        assert (out / "cluster_group.tsv").exists()
+
+        spikes = np.load(out / "_phy_spikes_subset.spikes.npy")
+        waveforms = np.load(out / "_phy_spikes_subset.waveforms.npy")
+        channels = np.load(out / "_phy_spikes_subset.channels.npy")
+        np.testing.assert_array_equal(spikes, analyzer.get_extension("random_spikes").get_data())
+        assert waveforms.shape[0] == channels.shape[0] == len(spikes)
+
+        # each subset spike's channels are its unit's sparse channels, padded with -1
+        unit_index = analyzer.sorting.to_spike_vector()["unit_index"][spikes]
+        for k in range(0, len(spikes), 25):
+            expected = np.flatnonzero(analyzer.sparsity.mask[unit_index[k]])
+            assert list(channels[k][channels[k] >= 0]) == list(expected)
+
+    def test_rejects_mismatched_recording(self, analyzer, tmp_path):
+        import spikeinterface as si
+
+        from aind_ecephys_s3_to_phy.export import export_phy_lazy
+
+        analyzer, _ = analyzer
+        other = si.generate_recording(durations=[4.0], num_channels=8, seed=1)
+        with pytest.raises(ValueError, match="does not match"):
+            export_phy_lazy(analyzer, other.to_dict(), tmp_path / "phy")

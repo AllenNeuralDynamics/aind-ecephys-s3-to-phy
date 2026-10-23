@@ -150,3 +150,28 @@ class TestMatchAnalyzerToRaw:
     )
     def test_strips_recording_suffix(self, analyzer_name, expected):
         assert match_analyzer_to_raw(analyzer_name) == expected
+
+
+class TestLazyRecordingDict:
+    CHAIN = {
+        "class": "spikeinterface.preprocessing.filter.HighpassFilterRecording",
+        "kwargs": {"recording": {"class": "ZarrRecordingExtractor", "kwargs": {"folder_path": "old"}}},
+        "relative_paths": True,
+    }
+
+    def test_s3_raw_gets_anon(self, monkeypatch):
+        from aind_ecephys_s3_to_phy import recording
+
+        monkeypatch.setattr(recording, "get_recording_dict", lambda *a, **k: self.CHAIN)
+        d = recording.lazy_recording_dict("analyzer.zarr", "s3://bucket/raw.zarr")
+        leaf = d["kwargs"]["recording"]["kwargs"]
+        assert leaf["folder_path"] == "s3://bucket/raw.zarr"
+        assert leaf["storage_options"] == {"anon": True}
+        assert d["relative_paths"] is False
+
+    def test_local_raw_has_no_storage_options(self, monkeypatch):
+        from aind_ecephys_s3_to_phy import recording
+
+        monkeypatch.setattr(recording, "get_recording_dict", lambda *a, **k: self.CHAIN)
+        d = recording.lazy_recording_dict("analyzer.zarr", "/data/raw.zarr")
+        assert "storage_options" not in d["kwargs"]["recording"]["kwargs"]

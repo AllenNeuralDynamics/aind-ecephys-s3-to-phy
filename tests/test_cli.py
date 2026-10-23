@@ -30,6 +30,7 @@ def test_convert_help():
     assert "--raw-uri" in result.stdout
     assert "--probe" in result.stdout
     assert "--experiment" in result.stdout
+    assert "--lazy" in result.stdout
 
 
 def test_extract_recording_help():
