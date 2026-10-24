@@ -146,7 +146,7 @@ Cmd = Annotated[
 
 def main() -> None:
     """CLI entry point."""
-    cmd = tyro.cli(Cmd, prog="s3-to-phy")  # type: ignore[call-overload]
+    cmd = tyro.cli(Cmd, prog="s3-to-phy")
     match cmd:
         case Convert():
             _run_convert(cmd)
@@ -188,7 +188,7 @@ def _run_convert(cmd: Convert) -> None:
             print("\n  Interrupted — cleaning up partial output...", file=sys.stderr)
             _cleanup_partial(phy_dir)
             sys.exit(130)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - one bad recording must not stop the batch
             n_fail += 1
             print(f"  FAILED: {exc}", file=sys.stderr)
 

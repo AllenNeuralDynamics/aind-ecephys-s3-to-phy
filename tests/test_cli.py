@@ -11,6 +11,7 @@ def test_help_exits_zero():
         [sys.executable, "-m", "aind_ecephys_s3_to_phy.cli", "--help"],
         capture_output=True,
         text=True,
+        check=False,
     )
     assert result.returncode == 0
     assert "convert" in result.stdout
@@ -24,6 +25,7 @@ def test_convert_help():
         [sys.executable, "-m", "aind_ecephys_s3_to_phy.cli", "convert", "--help"],
         capture_output=True,
         text=True,
+        check=False,
     )
     assert result.returncode == 0
     assert "--sorted-uri" in result.stdout
@@ -38,6 +40,7 @@ def test_extract_recording_help():
         [sys.executable, "-m", "aind_ecephys_s3_to_phy.cli", "extract-recording", "--help"],
         capture_output=True,
         text=True,
+        check=False,
     )
     assert result.returncode == 0
     assert "--analyzer-uri" in result.stdout
@@ -50,6 +53,7 @@ def test_compress_help():
         [sys.executable, "-m", "aind_ecephys_s3_to_phy.cli", "compress", "--help"],
         capture_output=True,
         text=True,
+        check=False,
     )
     assert result.returncode == 0
     assert "--phy-dir" in result.stdout
@@ -83,6 +87,7 @@ def test_convert_help_includes_motion_correct():
         [sys.executable, "-m", "aind_ecephys_s3_to_phy.cli", "convert", "--help"],
         capture_output=True,
         text=True,
+        check=False,
     )
     assert result.returncode == 0
     assert "--motion-correct" in result.stdout or "--no-motion-correct" in result.stdout
@@ -93,6 +98,7 @@ def test_extract_recording_help_includes_motion_correct():
         [sys.executable, "-m", "aind_ecephys_s3_to_phy.cli", "extract-recording", "--help"],
         capture_output=True,
         text=True,
+        check=False,
     )
     assert result.returncode == 0
     assert "--motion-correct" in result.stdout or "--no-motion-correct" in result.stdout
@@ -105,6 +111,7 @@ def test_list_subcommand(sorted_asset_uri):
         capture_output=True,
         text=True,
         timeout=120,
+        check=False,
     )
     assert result.returncode == 0
     assert "recording1.zarr" in result.stdout

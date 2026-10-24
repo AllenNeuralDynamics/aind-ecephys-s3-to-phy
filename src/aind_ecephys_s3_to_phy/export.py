@@ -265,7 +265,7 @@ def _read_params(phy_dir: Path) -> dict[str, Any]:
     if not params_path.exists():
         raise FileNotFoundError(f"No params.py found in {phy_dir}")
     namespace: dict[str, Any] = {"r": str, "np": np}
-    exec(params_path.read_text(), namespace)
+    exec(params_path.read_text(), namespace)  # noqa: S102 - params.py is Python by phy's format
     return namespace
 
 

@@ -1,6 +1,7 @@
 """Unit tests for recording dict manipulation (no S3 access needed)."""
 
 import copy
+from typing import Any, ClassVar
 
 import pytest
 
@@ -153,7 +154,7 @@ class TestMatchAnalyzerToRaw:
 
 
 class TestLazyRecordingDict:
-    CHAIN = {
+    CHAIN: ClassVar[dict[str, Any]] = {
         "class": "spikeinterface.preprocessing.filter.HighpassFilterRecording",
         "kwargs": {"recording": {"class": "ZarrRecordingExtractor", "kwargs": {"folder_path": "old"}}},
         "relative_paths": True,
