@@ -21,7 +21,9 @@ from typing import TYPE_CHECKING, Annotated
 if TYPE_CHECKING:
     from spikeinterface.core.baserecording import BaseRecording
 
+import numpy as np
 import tyro
+from aind_ephys_assets import correct_recording, load_motion
 
 from aind_ecephys_s3_to_phy.analyzer import (
     attach_recording,
@@ -32,7 +34,6 @@ from aind_ecephys_s3_to_phy.analyzer import (
     load_analyzer,
 )
 from aind_ecephys_s3_to_phy.export import compress_binary, export_phy, export_phy_lazy
-from aind_ecephys_s3_to_phy.motion import apply_motion_correction, find_motion_path, load_motion
 from aind_ecephys_s3_to_phy.recording import lazy_recording_dict, match_analyzer_to_raw, reconstruct_recording
 
 
@@ -265,14 +266,21 @@ def _maybe_motion_correct(
         print("  Motion correction: skipped (no sorted URI provided)")
         return recording
 
-    motion_path = find_motion_path(sorted_uri, recording_name)
-    if motion_path is None:
-        print("  Motion correction: no motion estimate found — writing uncorrected traces")
+    storage_options = {"anon": True} if sorted_uri.startswith("s3://") else None
+    try:
+        motion, info = load_motion(sorted_uri, recording_name, recording, storage_options=storage_options)
+    except FileNotFoundError:
+        print("  Motion correction: the sort saved no KS4 estimate — writing uncorrected traces")
         return recording
 
-    print(f"  Applying motion correction from {motion_path} ...")
-    motion = load_motion(motion_path)
-    return apply_motion_correction(recording, motion)
+    print(f"  Applying KS4 motion correction from {info['folder']} ...")
+    from spikeinterface.preprocessing import astype
+
+    corrected = correct_recording(recording, motion)
+    # Interpolation runs in float32; integer traces go back to their dtype so .dat/.cbin keep their size.
+    if np.issubdtype(recording.get_dtype(), np.integer):
+        corrected = astype(corrected, recording.get_dtype(), round=True)
+    return corrected
 
 
 def _run_list(cmd: List) -> None:

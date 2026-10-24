@@ -49,6 +49,14 @@ s3-to-phy extract-recording \
 s3-to-phy compress --phy-dir ./phy_output
 ```
 
+### Motion correction
+
+`convert` and `extract-recording` correct the traces with the drift estimate Kilosort 4 applied, read through
+`aind-ephys-assets` from the sort's `spikesorted/motion/<recording>/`. Sorts made before sorting capsule
+`cdef667` (2026-04-16), the example asset above among them, did not save it; those export uncorrected, and
+preprocessing's never-applied `dredge_fast` estimate is not used as a substitute. Integer traces stay integer.
+Pass `--no-motion-correct` to skip it.
+
 ### Lazy traces
 
 `--lazy` exports in about a minute per probe instead of hours, with no trace file:

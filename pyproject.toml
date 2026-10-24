@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "aind-ecephys-s3-to-phy"
 description = "Tools to get phy-ready data from AIND ecephys data on S3"
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [
   { name = "Allen Institute for Neural Dynamics" },
   { name = "Galen Lynch", email = "galen@galenlynch.com" },
@@ -16,6 +16,7 @@ readme = "README.md"
 version = "0.3.0"
 
 dependencies = [
+    "aind-ephys-assets[si]>=0.5",
     "spikeinterface[full,streaming_extractors]",
     "tyro",
     "mtscomp",
